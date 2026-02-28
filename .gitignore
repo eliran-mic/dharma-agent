@@ -1,0 +1,8 @@
+node_modules/
+dist/
+data/chroma_db/
+data/transcripts/
+.env
+*.js
+*.d.ts
+*.js.map
