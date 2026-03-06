@@ -12,7 +12,7 @@ export const config = {
   transcriptsPath: path.resolve(
     process.env.TRANSCRIPTS_PATH || "./data/transcripts"
   ),
-  embeddingModel: "Xenova/multilingual-e5-large",
+  embeddingModel: "Xenova/multilingual-e5-small",
   llmModel: "claude-sonnet-4-20250514",
   chunkTargetChars: 1000,
   chunkMinChars: 600,
