@@ -2,6 +2,7 @@ import express from "express";
 import { Telegraf } from "telegraf";
 import { config } from "../config.js";
 import { processStudentMessage } from "../core/room-manager.js";
+import { embedQuery } from "../ingestion/embedder.js";
 
 const bot = new Telegraf(config.telegramBotToken);
 const app = express();
@@ -17,6 +18,10 @@ Hello and welcome 🙏
 I am a digital dharma guide, grounded in the teachings of Vicaya and the Vipassana tradition.
 
 Feel free to ask me about meditation, Vipassana practice, or any dharma-related question.`;
+
+bot.catch((err: any, ctx: any) => {
+  console.error("Telegraf error:", err);
+});
 
 bot.start((ctx) => ctx.reply(WELCOME_MESSAGE));
 
@@ -96,8 +101,18 @@ if (WEBHOOK_URL) {
     bot.handleUpdate(req.body, res);
   });
 
-  app.listen(PORT, () => {
+  app.listen(PORT, async () => {
     console.log(`Dharma bot listening on port ${PORT}`);
+
+    // Warm up the embedding model so first request isn't slow
+    console.log("Warming up embedding model...");
+    try {
+      await embedQuery("warmup");
+      console.log("Embedding model ready.");
+    } catch (err) {
+      console.error("Failed to warm up embedding model:", err);
+    }
+
     bot.telegram.setWebhook(`${WEBHOOK_URL}${webhookPath}`).then(() => {
       console.log(`Webhook set to ${WEBHOOK_URL}${webhookPath}`);
     });

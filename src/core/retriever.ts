@@ -21,7 +21,12 @@ export async function retrieveChunks(
   collectionName: string,
   topK: number = config.retrievalTopK
 ): Promise<RetrievedChunk[]> {
-  const client = new ChromaClient({ path: config.chromaDbUrl });
+  const url = new URL(config.chromaDbUrl);
+  const client = new ChromaClient({
+    host: url.hostname,
+    port: parseInt(url.port || (url.protocol === "https:" ? "443" : "80")),
+    ssl: url.protocol === "https:",
+  });
 
   let collection;
   try {

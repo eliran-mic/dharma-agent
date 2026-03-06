@@ -61,7 +61,8 @@ jobs:
             --port 3000 \
             --min-instances 1 \
             --max-instances 1 \
-            --memory 512Mi \
+            --memory 2Gi \
+            --cpu 1 \
             --timeout 300 \
             --set-env-vars "WEBHOOK_URL=${{ steps.service_url.outputs.url }},CHROMA_DB_URL=${{ secrets.CHROMA_DB_URL }}" \
             --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest" \
