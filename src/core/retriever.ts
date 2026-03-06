@@ -17,7 +17,14 @@ export async function retrieveChunks(
   topK: number = config.retrievalTopK
 ): Promise<RetrievedChunk[]> {
   const client = new ChromaClient({ path: config.chromaDbUrl });
-  const collection = await client.getCollection({ name: collectionName });
+
+  let collection;
+  try {
+    collection = await client.getCollection({ name: collectionName });
+  } catch {
+    // Collection doesn't exist yet — return empty results
+    return [];
+  }
 
   const queryEmbedding = await embedQuery(query);
 

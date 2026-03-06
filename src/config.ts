@@ -36,7 +36,7 @@ export const teacherRegistry: TeacherConfig[] = [
     id: "kerem",
     name: "Vicaya",
     hebrewName: "ויצ'איה",
-    collectionName: "kerem_teachings",
+    collectionName: "keren_teachings",
     transcriptsDir: "kerem",
   },
   {
