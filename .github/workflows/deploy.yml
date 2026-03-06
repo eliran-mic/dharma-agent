@@ -57,6 +57,12 @@ jobs:
             --max-instances 1 \
             --memory 512Mi \
             --timeout 300 \
-            --set-env-vars "WEBHOOK_URL=${{ secrets.WEBHOOK_URL }}" \
             --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest" \
             --allow-unauthenticated
+
+      - name: Set webhook URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE }} --region ${{ env.REGION }} --format="value(status.url)")
+          gcloud run services update ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} \
+            --set-env-vars "WEBHOOK_URL=$SERVICE_URL"
