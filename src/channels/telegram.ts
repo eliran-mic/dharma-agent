@@ -86,6 +86,7 @@ app.get("/health", (_req, res) => {
 });
 
 const WEBHOOK_URL = process.env.WEBHOOK_URL;
+const PORT = parseInt(process.env.PORT || String(config.port), 10);
 
 if (WEBHOOK_URL) {
   // Production: webhook mode for Cloud Run
@@ -95,12 +96,11 @@ if (WEBHOOK_URL) {
     bot.handleUpdate(req.body, res);
   });
 
-  bot.telegram.setWebhook(`${WEBHOOK_URL}${webhookPath}`).then(() => {
-    console.log(`Webhook set to ${WEBHOOK_URL}${webhookPath}`);
-  });
-
-  app.listen(config.port, () => {
-    console.log(`Dharma bot (webhook mode) listening on port ${config.port}`);
+  app.listen(PORT, () => {
+    console.log(`Dharma bot listening on port ${PORT}`);
+    bot.telegram.setWebhook(`${WEBHOOK_URL}${webhookPath}`).then(() => {
+      console.log(`Webhook set to ${WEBHOOK_URL}${webhookPath}`);
+    });
   });
 } else {
   // Development: polling mode
