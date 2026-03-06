@@ -6,9 +6,25 @@ import type { Language } from "./language-detect.js";
 
 // Dynamic import for teacher-specific prompts
 const promptModules: Record<string, () => Promise<string>> = {
-  keren: async () => {
-    const mod = await import("../prompts/keren-prompt.js");
-    return mod.kerenPrompt;
+  kerem: async () => {
+    const mod = await import("../prompts/kerem-prompt.js");
+    return mod.keremPrompt;
+  },
+  shimi: async () => {
+    const mod = await import("../prompts/shimi-prompt.js");
+    return mod.shimiPrompt;
+  },
+  shachar: async () => {
+    const mod = await import("../prompts/shachar-prompt.js");
+    return mod.shacharPrompt;
+  },
+  sati: async () => {
+    const mod = await import("../prompts/sati-prompt.js");
+    return mod.satiPrompt;
+  },
+  stephen: async () => {
+    const mod = await import("../prompts/stephen-prompt.js");
+    return mod.stephenPrompt;
   },
 };
 

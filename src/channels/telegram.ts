@@ -6,13 +6,13 @@ const bot = new Telegraf(config.telegramBotToken);
 
 const WELCOME_MESSAGE = `שלום וברוכים הבאים 🙏
 
-אני מורה דרמה דיגיטלי, מבוסס על תורתה של קרן ארבל ומסורת הויפסנה של תובנה.
+אני מורה דרמה דיגיטלי, מבוסס על תורתה של ויצ'איה ומסורת הויפסנה.
 
 אפשר לשאול אותי על מדיטציה, תרגול ויפסנה, או כל שאלה בנושא הדרמה.
 
 Hello and welcome 🙏
 
-I am a digital dharma guide, grounded in the teachings of Keren Arbel and the Tovana Vipassana tradition.
+I am a digital dharma guide, grounded in the teachings of Vicaya and the Vipassana tradition.
 
 Feel free to ask me about meditation, Vipassana practice, or any dharma-related question.`;
 

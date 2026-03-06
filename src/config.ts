@@ -32,11 +32,39 @@ export interface TeacherConfig {
 
 export const teacherRegistry: TeacherConfig[] = [
   {
-    id: "keren",
-    name: "Keren Arbel",
-    hebrewName: "קרן ארבל",
-    collectionName: "keren_teachings",
-    transcriptsDir: "keren",
+    id: "kerem",
+    name: "Vicaya",
+    hebrewName: "ויצ'איה",
+    collectionName: "kerem_teachings",
+    transcriptsDir: "kerem",
+  },
+  {
+    id: "shimi",
+    name: "Viriya",
+    hebrewName: "וירייה",
+    collectionName: "shimi_teachings",
+    transcriptsDir: "shimi",
+  },
+  {
+    id: "shachar",
+    name: "Samādhi",
+    hebrewName: "סמאדי",
+    collectionName: "shachar_teachings",
+    transcriptsDir: "shachar",
+  },
+  {
+    id: "sati",
+    name: "Upekkhā",
+    hebrewName: "אופקהא",
+    collectionName: "sati_teachings",
+    transcriptsDir: "sati",
+  },
+  {
+    id: "stephen",
+    name: "Pīti",
+    hebrewName: "פיטי",
+    collectionName: "stephen_teachings",
+    transcriptsDir: "stephen",
   },
 ];
 
