@@ -8,7 +8,7 @@ RUN npm ci
 COPY . .
 
 # Pre-download the embedding model so it's cached in the image
-RUN npx tsx -e "import { pipeline } from '@xenova/transformers'; await pipeline('feature-extraction', 'Xenova/multilingual-e5-large');"
+RUN node scripts/precache-model.mjs
 
 EXPOSE 3000
 
