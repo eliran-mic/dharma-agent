@@ -1,8 +1,10 @@
+import express from "express";
 import { Telegraf } from "telegraf";
 import { config } from "../config.js";
 import { processStudentMessage } from "../core/room-manager.js";
 
 const bot = new Telegraf(config.telegramBotToken);
+const app = express();
 
 const WELCOME_MESSAGE = `שלום וברוכים הבאים 🙏
 
@@ -78,9 +80,33 @@ function splitMessage(text: string, maxLength: number): string[] {
   return parts;
 }
 
-// Start the bot
-console.log("Starting Telegram bot...");
-bot.launch();
+// Health check endpoint (required for Cloud Run)
+app.get("/health", (_req, res) => {
+  res.json({ status: "ok" });
+});
+
+const WEBHOOK_URL = process.env.WEBHOOK_URL;
+
+if (WEBHOOK_URL) {
+  // Production: webhook mode for Cloud Run
+  const webhookPath = `/telegram/${config.telegramBotToken}`;
+  app.use(express.json());
+  app.post(webhookPath, (req, res) => {
+    bot.handleUpdate(req.body, res);
+  });
+
+  bot.telegram.setWebhook(`${WEBHOOK_URL}${webhookPath}`).then(() => {
+    console.log(`Webhook set to ${WEBHOOK_URL}${webhookPath}`);
+  });
+
+  app.listen(config.port, () => {
+    console.log(`Dharma bot (webhook mode) listening on port ${config.port}`);
+  });
+} else {
+  // Development: polling mode
+  console.log("Starting Telegram bot (polling mode)...");
+  bot.launch();
+}
 
 // Graceful shutdown
 process.once("SIGINT", () => bot.stop("SIGINT"));
