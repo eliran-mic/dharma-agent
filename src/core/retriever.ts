@@ -1,4 +1,9 @@
-import { ChromaClient } from "chromadb";
+import { ChromaClient, type IEmbeddingFunction } from "chromadb";
+
+// We provide our own embeddings, so this is a no-op to satisfy ChromaDB's collection requirement
+const noopEmbeddingFunction: IEmbeddingFunction = {
+  generate: async (texts: string[]) => texts.map(() => []),
+};
 import { embedQuery } from "../ingestion/embedder.js";
 import { config } from "../config.js";
 
@@ -20,7 +25,7 @@ export async function retrieveChunks(
 
   let collection;
   try {
-    collection = await client.getCollection({ name: collectionName });
+    collection = await client.getCollection({ name: collectionName, embeddingFunction: noopEmbeddingFunction });
   } catch {
     // Collection doesn't exist yet — return empty results
     return [];
