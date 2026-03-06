@@ -7,6 +7,7 @@ export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || "",
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || "",
   port: parseInt(process.env.PORT || "3000", 10),
+  chromaDbUrl: process.env.CHROMA_DB_URL || "http://localhost:8000",
   chromaDbPath: path.resolve(process.env.CHROMA_DB_PATH || "./data/chroma_db"),
   transcriptsPath: path.resolve(
     process.env.TRANSCRIPTS_PATH || "./data/transcripts"

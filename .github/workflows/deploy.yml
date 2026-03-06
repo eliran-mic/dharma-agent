@@ -63,7 +63,7 @@ jobs:
             --max-instances 1 \
             --memory 512Mi \
             --timeout 300 \
-            --set-env-vars "WEBHOOK_URL=${{ steps.service_url.outputs.url }}" \
+            --set-env-vars "WEBHOOK_URL=${{ steps.service_url.outputs.url }},CHROMA_DB_URL=${{ secrets.CHROMA_DB_URL }}" \
             --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest" \
             --allow-unauthenticated
 
@@ -72,4 +72,4 @@ jobs:
           SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE }} --region ${{ env.REGION }} --format="value(status.url)")
           gcloud run services update ${{ env.SERVICE }} \
             --region ${{ env.REGION }} \
-            --set-env-vars "WEBHOOK_URL=$SERVICE_URL"
+            --set-env-vars "WEBHOOK_URL=$SERVICE_URL,CHROMA_DB_URL=${{ secrets.CHROMA_DB_URL }}"
