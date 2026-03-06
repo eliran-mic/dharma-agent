@@ -36,12 +36,24 @@ export async function retrieveChunks(
     return [];
   }
 
-  const queryEmbedding = await embedQuery(query);
+  let queryEmbedding: number[];
+  try {
+    queryEmbedding = await embedQuery(query);
+  } catch (err) {
+    console.error(`Embedding failed for collection ${collectionName}:`, err);
+    return [];
+  }
 
-  const results = await collection.query({
-    queryEmbeddings: [queryEmbedding],
-    nResults: topK,
-  });
+  let results;
+  try {
+    results = await collection.query({
+      queryEmbeddings: [queryEmbedding],
+      nResults: topK,
+    });
+  } catch (err) {
+    console.error(`ChromaDB query failed for ${collectionName}:`, err);
+    return [];
+  }
 
   const chunks: RetrievedChunk[] = [];
 

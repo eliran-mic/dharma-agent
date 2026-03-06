@@ -61,7 +61,7 @@ jobs:
             --port 3000 \
             --min-instances 1 \
             --max-instances 1 \
-            --memory 1Gi \
+            --memory 2Gi \
             --cpu 1 \
             --no-cpu-throttling \
             --timeout 300 \
