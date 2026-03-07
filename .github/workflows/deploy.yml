@@ -64,6 +64,7 @@ jobs:
             --memory 2Gi \
             --cpu 1 \
             --no-cpu-throttling \
+            --execution-environment gen2 \
             --timeout 300 \
             --set-env-vars "WEBHOOK_URL=${{ steps.service_url.outputs.url }},CHROMA_DB_URL=${{ secrets.CHROMA_DB_URL }}" \
             --set-secrets "ANTHROPIC_API_KEY=ANTHROPIC_API_KEY:latest,TELEGRAM_BOT_TOKEN=TELEGRAM_BOT_TOKEN:latest" \
