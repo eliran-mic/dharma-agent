@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import type { Chunk } from "./chunker.js";
 
 let embedPipeline: any = null;
+let embedLock: Promise<void> = Promise.resolve();
 
 async function getEmbeddingPipeline() {
   if (!embedPipeline) {
@@ -12,24 +13,34 @@ async function getEmbeddingPipeline() {
   return embedPipeline;
 }
 
-export async function embedTexts(texts: string[]): Promise<number[][]> {
-  const pipe = await getEmbeddingPipeline();
-  const results: number[][] = [];
+// Serialize all ONNX inference calls to prevent concurrent native execution (causes SIGSEGV)
+async function withEmbedLock<T>(fn: () => Promise<T>): Promise<T> {
+  const prev = embedLock;
+  let resolve: () => void;
+  embedLock = new Promise<void>((r) => { resolve = r; });
+  await prev;
+  try {
+    return await fn();
+  } finally {
+    resolve!();
+  }
+}
 
-  // Process in batches to avoid memory issues
-  const batchSize = 16;
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const batch = texts.slice(i, i + batchSize);
-    for (const text of batch) {
+export async function embedTexts(texts: string[]): Promise<number[][]> {
+  return withEmbedLock(async () => {
+    const pipe = await getEmbeddingPipeline();
+    const results: number[][] = [];
+
+    for (const text of texts) {
       const output = await pipe(text, {
         pooling: "mean",
         normalize: true,
       });
       results.push(Array.from(output.data as Float32Array));
     }
-  }
 
-  return results;
+    return results;
+  });
 }
 
 export async function embedQuery(query: string): Promise<number[]> {

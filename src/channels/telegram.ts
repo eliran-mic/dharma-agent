@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { processStudentMessage } from "../core/room-manager.js";
 import { embedQuery } from "../ingestion/embedder.js";
 
+
 const bot = new Telegraf(config.telegramBotToken);
 const app = express();
 

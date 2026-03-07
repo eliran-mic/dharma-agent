@@ -74,4 +74,4 @@ jobs:
           SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE }} --region ${{ env.REGION }} --format="value(status.url)")
           gcloud run services update ${{ env.SERVICE }} \
             --region ${{ env.REGION }} \
-            --set-env-vars "WEBHOOK_URL=$SERVICE_URL,CHROMA_DB_URL=${{ secrets.CHROMA_DB_URL }}"
+            --update-env-vars "WEBHOOK_URL=$SERVICE_URL"
