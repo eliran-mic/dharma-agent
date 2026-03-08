@@ -1,4 +1,4 @@
-import { retrieveChunks, type RetrievedChunk } from "./retriever.js";
+import type { RetrievedChunk } from "./retriever.js";
 import { chat, type Message } from "./llm-client.js";
 import { getBaseTeacherPrompt } from "../prompts/base-teacher-prompt.js";
 import type { TeacherConfig } from "../config.js";
@@ -35,17 +35,17 @@ export interface TeacherResponse {
   retrievedChunks: RetrievedChunk[];
 }
 
+/** Single-teacher response (used when only 1 teacher is configured). */
 export async function generateTeacherResponse(
   teacher: TeacherConfig,
   studentMessage: string,
   conversationHistory: Message[],
-  language: Language,
-  otherTeacherResponses: TeacherResponse[] = []
+  language: Language
 ): Promise<TeacherResponse> {
-  // Retrieve relevant teachings
+  // This path is only used for single-teacher mode; embedding is done inside retrieveChunks
+  const { retrieveChunks } = await import("./retriever.js");
   const chunks = await retrieveChunks(studentMessage, teacher.collectionName);
 
-  // Build the system prompt
   const basePrompt = getBaseTeacherPrompt(language);
   const teacherPromptFn = promptModules[teacher.id];
   const teacherPrompt = teacherPromptFn ? await teacherPromptFn() : "";
@@ -53,25 +53,13 @@ export async function generateTeacherResponse(
   let contextSection = "";
   if (chunks.length > 0) {
     const excerpts = chunks
-      .map(
-        (c, i) =>
-          `[Excerpt ${i + 1}]: ${c.text}`
-      )
+      .map((c, i) => `[Excerpt ${i + 1}]: ${c.text}`)
       .join("\n\n");
     contextSection = `\n\n## Relevant Excerpts from Your Teachings\n${excerpts}`;
   }
 
-  let otherResponsesSection = "";
-  if (otherTeacherResponses.length > 0) {
-    const others = otherTeacherResponses
-      .map((r) => `${r.teacherName}: ${r.text}`)
-      .join("\n\n");
-    otherResponsesSection = `\n\n## What Other Teachers Have Said\n${others}`;
-  }
+  const systemPrompt = `${teacherPrompt}\n\n${basePrompt}${contextSection}`;
 
-  const systemPrompt = `${teacherPrompt}\n\n${basePrompt}${contextSection}${otherResponsesSection}`;
-
-  // Build messages including conversation history
   const messages: Message[] = [
     ...conversationHistory,
     { role: "user", content: studentMessage },
@@ -85,4 +73,96 @@ export async function generateTeacherResponse(
     text: response,
     retrievedChunks: chunks,
   };
+}
+
+/**
+ * Unified multi-teacher response: 1 LLM call that generates all teachers' perspectives.
+ * Expects chunks to be pre-retrieved (embedding done once upstream).
+ */
+export async function generateUnifiedResponse(
+  teachers: TeacherConfig[],
+  teacherChunks: Array<{ teacher: TeacherConfig; chunks: RetrievedChunk[] }>,
+  studentMessage: string,
+  conversationHistory: Message[],
+  language: Language
+): Promise<Array<{ teacher: string; text: string }>> {
+  const basePrompt = getBaseTeacherPrompt(language);
+
+  // Build per-teacher sections with their persona + retrieved context
+  const teacherSections = await Promise.all(
+    teacherChunks.map(async ({ teacher, chunks }) => {
+      const promptFn = promptModules[teacher.id];
+      const teacherPrompt = promptFn ? await promptFn() : "";
+      const name = language === "hebrew" ? teacher.hebrewName : teacher.name;
+
+      let excerpts = "(No relevant excerpts found)";
+      if (chunks.length > 0) {
+        excerpts = chunks
+          .map((c, i) => `[Excerpt ${i + 1}]: ${c.text}`)
+          .join("\n\n");
+      }
+
+      return `### ${name} (${teacher.id})\n${teacherPrompt}\n\n#### Relevant excerpts from ${name}'s teachings:\n${excerpts}`;
+    })
+  );
+
+  const teacherNames = teachers.map((t) =>
+    language === "hebrew" ? t.hebrewName : t.name
+  );
+
+  const systemPrompt = `You are generating a dharma discussion room where ${teachers.length} teachers each respond to a student's question. Each teacher has a unique perspective, teaching style, and their own body of recorded teachings.
+
+${basePrompt}
+
+---
+
+## The Teachers
+
+${teacherSections.join("\n\n---\n\n")}
+
+---
+
+## Instructions
+
+Respond as ALL ${teachers.length} teachers. Each teacher should:
+- Speak in their unique voice and teaching style
+- Draw naturally from their specific teaching excerpts when relevant
+- Build on previous teachers' responses — complement, don't repeat
+- Keep each response focused and concise (2-4 paragraphs)
+- ${language === "hebrew" ? "Respond entirely in Hebrew" : "Respond in English"}
+
+## Response Format
+
+You MUST respond with a JSON array. Each element has "teacher" (exact name) and "text" (the response).
+Teachers in order: ${teacherNames.map((n) => `"${n}"`).join(", ")}
+
+Example format:
+[{"teacher":"${teacherNames[0]}","text":"..."},{"teacher":"${teacherNames[1]}","text":"..."}]`;
+
+  const messages: Message[] = [
+    ...conversationHistory,
+    { role: "user", content: studentMessage },
+  ];
+
+  const response = await chat(systemPrompt, messages, 4096);
+
+  try {
+    const jsonMatch = response.match(/\[[\s\S]*\]/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]) as Array<{
+        teacher: string;
+        text: string;
+      }>;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to parse unified response JSON:", err);
+  }
+
+  // Fallback: return the raw response attributed to the first teacher
+  const fallbackName =
+    language === "hebrew" ? teachers[0].hebrewName : teachers[0].name;
+  return [{ teacher: fallbackName, text: response }];
 }

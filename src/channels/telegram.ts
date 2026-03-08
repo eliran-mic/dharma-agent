@@ -87,8 +87,12 @@ function splitMessage(text: string, maxLength: number): string[] {
 }
 
 // Health check endpoint (required for Cloud Run)
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+app.get("/health", async (_req, res) => {
+  const { checkChromaHealth } = await import("../core/retriever.js");
+  const chromaOk = await checkChromaHealth();
+  const status = chromaOk ? "ok" : "degraded";
+  const code = chromaOk ? 200 : 503;
+  res.status(code).json({ status, chroma: chromaOk });
 });
 
 const WEBHOOK_URL = process.env.WEBHOOK_URL;

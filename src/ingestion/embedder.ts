@@ -53,7 +53,12 @@ export async function ingestChunks(
   chunks: Chunk[],
   collectionName: string
 ): Promise<void> {
-  const client = new ChromaClient({ path: undefined });
+  const url = new URL(config.chromaDbUrl);
+  const client = new ChromaClient({
+    host: url.hostname,
+    port: parseInt(url.port || (url.protocol === "https:" ? "443" : "80")),
+    ssl: url.protocol === "https:",
+  });
   const collection = await client.getOrCreateCollection({
     name: collectionName,
     metadata: { "hnsw:space": "cosine" },

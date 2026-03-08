@@ -1,6 +1,6 @@
 import { chunkAllTranscripts } from "../src/ingestion/chunker.js";
 
-const chunks = chunkAllTranscripts("keren");
+const chunks = chunkAllTranscripts("kerem");
 console.log("Total chunks:", chunks.length);
 
 const sizes = chunks.map((c) => c.text.length);

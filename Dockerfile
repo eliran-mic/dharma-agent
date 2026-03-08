@@ -7,9 +7,12 @@ RUN npm ci
 
 COPY . .
 
+# Compile TypeScript to JavaScript
+RUN npx tsc
+
 # Pre-download the embedding model so it's cached in the image
 RUN node scripts/precache-model.mjs
 
 EXPOSE 3000
 
-CMD ["npx", "tsx", "src/channels/telegram.ts"]
+CMD ["node", "dist/src/channels/telegram.js"]
