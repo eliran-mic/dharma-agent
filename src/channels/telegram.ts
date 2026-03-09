@@ -36,31 +36,53 @@ bot.on("text", async (ctx) => {
   const userId = String(ctx.from.id);
   const message = ctx.message.text;
 
-  // Show typing indicator
-  await ctx.sendChatAction("typing");
+  // Detect language for the acknowledgment message
+  const hebrewChars = (message.match(/[\u0590-\u05FF]/g) || []).length;
+  const isHebrew = hebrewChars > (message.match(/[a-zA-Z]/g) || []).length;
+
+  // Send immediate acknowledgment so the user knows we're working
+  const ackMessage = isHebrew
+    ? "🙏 המורים מתכנסים לדיון... אנא המתינו"
+    : "🙏 The teachers are gathering... please wait";
+  const ack = await ctx.reply(ackMessage);
+
+  // Keep typing indicator alive during processing (expires after ~5s)
+  const typingInterval = setInterval(() => {
+    ctx.sendChatAction("typing").catch(() => {});
+  }, 4000);
 
   try {
     const result = await processStudentMessage(userId, message);
 
-    // Format response with teacher names
-    for (const msg of result.messages) {
-      const formatted = `🧘 ${msg.teacher}: ${msg.text}`;
+    // Delete the acknowledgment message
+    await ctx.deleteMessage(ack.message_id).catch(() => {});
 
-      // Telegram has a 4096 char limit per message
-      if (formatted.length > 4000) {
-        const chunks = splitMessage(formatted, 4000);
-        for (const chunk of chunks) {
-          await ctx.reply(chunk);
-        }
-      } else {
-        await ctx.reply(formatted);
+    // Combine all teacher responses into a single message
+    const combined = result.messages
+      .map((msg) => `🧘 *${msg.teacher}*\n${msg.text}`)
+      .join("\n\n───────────────\n\n");
+
+    // Telegram has a 4096 char limit per message
+    if (combined.length > 4000) {
+      const parts = splitMessage(combined, 4000);
+      for (const part of parts) {
+        await ctx.reply(part, { parse_mode: "Markdown" }).catch(() =>
+          ctx.reply(part)
+        );
       }
+    } else {
+      await ctx.reply(combined, { parse_mode: "Markdown" }).catch(() =>
+        ctx.reply(combined)
+      );
     }
   } catch (err) {
     console.error("Telegram handler error:", err);
+    await ctx.deleteMessage(ack.message_id).catch(() => {});
     await ctx.reply(
       "I'm sorry, something went wrong. Please try again.\nסליחה, משהו השתבש. אנא נסו שוב."
     );
+  } finally {
+    clearInterval(typingInterval);
   }
 });
 
@@ -128,6 +150,6 @@ if (WEBHOOK_URL) {
   bot.launch();
 }
 
-// Graceful shutdown
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+// Graceful shutdown (bot.stop() only works in polling mode)
+process.once("SIGINT", () => { try { bot.stop("SIGINT"); } catch {} });
+process.once("SIGTERM", () => { try { bot.stop("SIGTERM"); } catch {} });
