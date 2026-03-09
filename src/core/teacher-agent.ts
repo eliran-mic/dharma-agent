@@ -144,7 +144,7 @@ Example format:
     { role: "user", content: studentMessage },
   ];
 
-  const response = await chat(systemPrompt, messages, 4096);
+  const response = await chat(systemPrompt, messages, 2048);
 
   try {
     const jsonMatch = response.match(/\[[\s\S]*\]/);
