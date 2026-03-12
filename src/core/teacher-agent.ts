@@ -144,8 +144,9 @@ Example format:
     { role: "user", content: studentMessage },
   ];
 
-  const response = await chat(systemPrompt, messages, 2048);
+  const response = await chat(systemPrompt, messages, 4096);
 
+  // Try to parse the full JSON array
   try {
     const jsonMatch = response.match(/\[[\s\S]*\]/);
     if (jsonMatch) {
@@ -158,11 +159,52 @@ Example format:
       }
     }
   } catch (err) {
-    console.error("Failed to parse unified response JSON:", err);
+    console.error("Failed to parse unified response JSON, attempting partial recovery...");
   }
 
-  // Fallback: return the raw response attributed to the first teacher
+  // Try to recover individual teacher responses from truncated JSON
+  const recovered = recoverPartialResponses(response, teacherNames);
+  if (recovered.length > 0) {
+    return recovered;
+  }
+
+  // Last resort: return the raw response with JSON artifacts stripped
   const fallbackName =
     language === "hebrew" ? teachers[0].hebrewName : teachers[0].name;
-  return [{ teacher: fallbackName, text: response }];
+  const cleanText = response
+    .replace(/^\s*\[?\s*\{?\s*"teacher"\s*:\s*"[^"]*"\s*,\s*"text"\s*:\s*"?/i, "")
+    .replace(/"\s*}\s*,?\s*\{?\s*"teacher"[\s\S]*$/i, "")
+    .replace(/\\n/g, "\n")
+    .replace(/\\"/g, '"')
+    .trim();
+  return [{ teacher: fallbackName, text: cleanText || response }];
+}
+
+/**
+ * Extract as many complete teacher responses as possible from truncated JSON.
+ * Matches individual {"teacher":"...","text":"..."} objects even if the array is incomplete.
+ */
+function recoverPartialResponses(
+  raw: string,
+  teacherNames: string[]
+): Array<{ teacher: string; text: string }> {
+  const results: Array<{ teacher: string; text: string }> = [];
+
+  for (const name of teacherNames) {
+    // Match this teacher's object — greedy up to the next teacher object or end
+    const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(
+      `"teacher"\\s*:\\s*"${escapedName}"\\s*,\\s*"text"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"`
+    );
+    const match = raw.match(pattern);
+    if (match) {
+      const text = match[1]
+        .replace(/\\n/g, "\n")
+        .replace(/\\"/g, '"')
+        .replace(/\\\\/g, "\\");
+      results.push({ teacher: name, text });
+    }
+  }
+
+  return results;
 }

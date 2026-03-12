@@ -7,7 +7,8 @@ import { retrieveWithEmbedding } from "./retriever.js";
 import { embedQuery } from "../ingestion/embedder.js";
 import type { Message } from "./llm-client.js";
 import { getHistory, addMessage } from "./conversation-store.js";
-import { getAllTeachers, type TeacherConfig } from "../config.js";
+import { getAllTeachers, getTeacher, type TeacherConfig } from "../config.js";
+import { getSelectedTeacher } from "./teacher-preference.js";
 
 export interface RoomResponse {
   messages: Array<{ teacher: string; text: string }>;
@@ -20,12 +21,23 @@ export async function processStudentMessage(
   message: string
 ): Promise<RoomResponse> {
   const language = detectLanguage(message);
-  const teachers = getAllTeachers();
-  const history = getHistory(userId);
+  // Snapshot history BEFORE adding the new message (getHistory returns a reference)
+  const history = [...getHistory(userId)];
 
-  // Add student message to history
+  // Add student message to history store
   addMessage(userId, { role: "user", content: message });
 
+  // Check if user has selected a specific teacher
+  const selectedTeacherId = getSelectedTeacher(userId);
+  if (selectedTeacherId) {
+    const teacher = getTeacher(selectedTeacherId);
+    if (teacher) {
+      return singleTeacherMode(teacher, message, history, language, userId);
+    }
+  }
+
+  // Default: all teachers
+  const teachers = getAllTeachers();
   if (teachers.length === 1) {
     return singleTeacherMode(teachers[0], message, history, language, userId);
   }

@@ -1,36 +1,162 @@
 import express from "express";
-import { Telegraf } from "telegraf";
-import { config } from "../config.js";
+import { Telegraf, Markup } from "telegraf";
+import { config, getAllTeachers } from "../config.js";
 import { processStudentMessage } from "../core/room-manager.js";
 import { embedQuery } from "../ingestion/embedder.js";
-
+import {
+  getSelectedTeacher,
+  setSelectedTeacher,
+} from "../core/teacher-preference.js";
+import { clearHistory } from "../core/conversation-store.js";
 
 const bot = new Telegraf(config.telegramBotToken);
 const app = express();
 
-const WELCOME_MESSAGE = `שלום וברוכים הבאים 🙏
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
 
-אני מורה דרמה דיגיטלי, מבוסס על תורתה של ויצ'איה ומסורת הויפסנה.
+function buildTeacherSelectionMessage(isHebrew: boolean) {
+  const teachers = getAllTeachers();
 
-אפשר לשאול אותי על מדיטציה, תרגול ויפסנה, או כל שאלה בנושא הדרמה.
+  if (isHebrew) {
+    let text = "🙏 <b>בחרו מורה לשיחה</b>\n\nבחרו מורה שתרצו לשוחח איתו, או בחרו \"כל המורים\" לקבל תשובות מכולם:\n";
+    for (const t of teachers) {
+      text += `\n<b>${escapeHtml(t.hebrewName)}</b> — ${escapeHtml(t.hebrewEssence)}\n`;
+    }
+    return text;
+  }
 
-Hello and welcome 🙏
+  let text = "🙏 <b>Choose a teacher to talk with</b>\n\nSelect a teacher you'd like to have a conversation with, or choose \"All teachers\" to hear from everyone:\n";
+  for (const t of teachers) {
+    text += `\n<b>${escapeHtml(t.name)}</b> — ${escapeHtml(t.essence)}\n`;
+  }
+  return text;
+}
 
-I am a digital dharma guide, grounded in the teachings of Vicaya and the Vipassana tradition.
+function buildTeacherKeyboard(isHebrew: boolean) {
+  const teachers = getAllTeachers();
+  const buttons = teachers.map((t) =>
+    Markup.button.callback(
+      isHebrew ? t.hebrewName : t.name,
+      `select_teacher:${t.id}`
+    )
+  );
+  // Add "All teachers" option
+  buttons.push(
+    Markup.button.callback(
+      isHebrew ? "🧘 כל המורים" : "🧘 All teachers",
+      "select_teacher:all"
+    )
+  );
 
-Feel free to ask me about meditation, Vipassana practice, or any dharma-related question.`;
+  // Arrange in rows of 2
+  const rows: Array<ReturnType<typeof Markup.button.callback>[]> = [];
+  for (let i = 0; i < buttons.length; i += 2) {
+    rows.push(buttons.slice(i, i + 2));
+  }
+  return Markup.inlineKeyboard(rows);
+}
+
+const WELCOME_MESSAGE_HE = `שלום וברוכים הבאים 🙏
+
+אני מורה דרמה דיגיטלי, מבוסס על מסורת הויפסנה.
+
+בחרו מורה לשיחה אישית, או בחרו "כל המורים" כדי לקבל תשובות מכל המורים יחד.`;
+
+const WELCOME_MESSAGE_EN = `Hello and welcome 🙏
+
+I am a digital dharma guide, grounded in the Vipassana tradition.
+
+Choose a teacher for a personal conversation, or select "All teachers" to hear from everyone.`;
 
 bot.catch((err: any, ctx: any) => {
   console.error("Telegraf error:", err);
 });
 
-bot.start((ctx) => ctx.reply(WELCOME_MESSAGE));
+bot.start(async (ctx) => {
+  const lang = ctx.from?.language_code;
+  const isHebrew = lang === "he";
 
-bot.help((ctx) =>
-  ctx.reply(
-    "Simply send me a message with your question about dharma, meditation, or mindfulness practice. I'll respond in the language you write in (Hebrew or English).\n\nפשוט שלחו לי הודעה עם השאלה שלכם על דרמה, מדיטציה או תרגול קשיבות. אני אענה בשפה שבה תכתבו."
-  )
-);
+  const welcomeText = isHebrew ? WELCOME_MESSAGE_HE : WELCOME_MESSAGE_EN;
+  const selectionText = buildTeacherSelectionMessage(isHebrew);
+  const keyboard = buildTeacherKeyboard(isHebrew);
+
+  await ctx.reply(welcomeText);
+  await ctx.reply(selectionText, { parse_mode: "HTML", ...keyboard });
+});
+
+bot.command("choose", async (ctx) => {
+  const msgText = ctx.message.text || "";
+  const hebrewChars = (msgText.match(/[\u0590-\u05FF]/g) || []).length;
+  const isHebrew = hebrewChars > 0 || ctx.from?.language_code === "he";
+
+  const text = buildTeacherSelectionMessage(isHebrew);
+  const keyboard = buildTeacherKeyboard(isHebrew);
+  await ctx.reply(text, { parse_mode: "HTML", ...keyboard });
+});
+
+bot.help(async (ctx) => {
+  const lang = ctx.from?.language_code;
+  const isHebrew = lang === "he";
+  const userId = String(ctx.from.id);
+  const selectedId = getSelectedTeacher(userId);
+  const teachers = getAllTeachers();
+  const selected = selectedId
+    ? teachers.find((t) => t.id === selectedId)
+    : null;
+
+  const currentHe = selected
+    ? `המורה הנוכחי: *${selected.hebrewName}*`
+    : "כרגע: *כל המורים*";
+  const currentEn = selected
+    ? `Current teacher: *${selected.name}*`
+    : "Currently: *All teachers*";
+
+  const helpText = isHebrew
+    ? `שלחו הודעה עם השאלה שלכם על דרמה, מדיטציה או תרגול קשיבות.\n\n${currentHe}\n\nהשתמשו ב /choose כדי לבחור מורה אחר.`
+    : `Send me a message with your question about dharma, meditation, or mindfulness practice.\n\n${currentEn}\n\nUse /choose to select a different teacher.`;
+
+  await ctx.reply(helpText, { parse_mode: "Markdown" });
+});
+
+// Handle teacher selection callback
+bot.action(/^select_teacher:(.+)$/, async (ctx) => {
+  const teacherId = ctx.match[1];
+  const userId = String(ctx.from.id);
+  const lang = ctx.from?.language_code;
+  const isHebrew = lang === "he";
+
+  if (teacherId === "all") {
+    const changed = setSelectedTeacher(userId, null);
+    if (changed) clearHistory(userId);
+    const text = isHebrew
+      ? "🧘 מצוין! כל המורים ישתתפו בשיחה. שלחו הודעה כדי להתחיל."
+      : "🧘 Great! All teachers will participate in the conversation. Send a message to begin.";
+    await ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup(undefined);
+    await ctx.reply(text);
+  } else {
+    const teachers = getAllTeachers();
+    const teacher = teachers.find((t) => t.id === teacherId);
+    if (!teacher) {
+      await ctx.answerCbQuery("Teacher not found");
+      return;
+    }
+
+    const changed = setSelectedTeacher(userId, teacherId);
+    if (changed) clearHistory(userId);
+    const text = isHebrew
+      ? `🙏 בחרתם ב<b>${escapeHtml(teacher.hebrewName)}</b>. שלחו הודעה כדי להתחיל שיחה.`
+      : `🙏 You chose <b>${escapeHtml(teacher.name)}</b>. Send a message to start the conversation.`;
+    await ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup(undefined);
+    await ctx.reply(text, { parse_mode: "HTML" });
+  }
+});
 
 bot.on("text", async (ctx) => {
   const userId = String(ctx.from.id);
@@ -40,13 +166,30 @@ bot.on("text", async (ctx) => {
   const hebrewChars = (message.match(/[\u0590-\u05FF]/g) || []).length;
   const isHebrew = hebrewChars > (message.match(/[a-zA-Z]/g) || []).length;
 
-  // Send immediate acknowledgment so the user knows we're working
-  const ackMessage = isHebrew
-    ? "🙏 המורים מתכנסים לדיון... אנא המתינו"
-    : "🙏 The teachers are gathering... please wait";
+  // Check if user has a teacher preference
+  const selectedId = getSelectedTeacher(userId);
+  const teachers = getAllTeachers();
+  const selectedTeacher = selectedId
+    ? teachers.find((t) => t.id === selectedId)
+    : null;
+
+  // Tailored acknowledgment message
+  let ackMessage: string;
+  if (selectedTeacher) {
+    const teacherName = isHebrew
+      ? selectedTeacher.hebrewName
+      : selectedTeacher.name;
+    ackMessage = isHebrew
+      ? `🙏 ${teacherName} מתבוננ/ת בשאלה שלך... אנא המתן/י`
+      : `🙏 ${teacherName} is contemplating your question... please wait`;
+  } else {
+    ackMessage = isHebrew
+      ? "🙏 המורים מתכנסים לדיון... אנא המתינו"
+      : "🙏 The teachers are gathering... please wait";
+  }
   const ack = await ctx.reply(ackMessage);
 
-  // Keep typing indicator alive during processing (expires after ~5s)
+  // Keep typing indicator alive during processing
   const typingInterval = setInterval(() => {
     ctx.sendChatAction("typing").catch(() => {});
   }, 4000);
@@ -57,23 +200,23 @@ bot.on("text", async (ctx) => {
     // Delete the acknowledgment message
     await ctx.deleteMessage(ack.message_id).catch(() => {});
 
-    // Combine all teacher responses into a single message
-    const combined = result.messages
-      .map((msg) => `🧘 *${msg.teacher}*\n${msg.text}`)
-      .join("\n\n───────────────\n\n");
+    // Send each teacher's response as a separate message to avoid
+    // truncation and broken Markdown from splitting mid-format
+    for (const msg of result.messages) {
+      const formatted = `🧘 <b>${escapeHtml(msg.teacher)}</b>\n\n${escapeHtml(msg.text)}`;
 
-    // Telegram has a 4096 char limit per message
-    if (combined.length > 4000) {
-      const parts = splitMessage(combined, 4000);
-      for (const part of parts) {
-        await ctx.reply(part, { parse_mode: "Markdown" }).catch(() =>
-          ctx.reply(part)
-        );
+      if (formatted.length > 4000) {
+        const parts = splitMessage(formatted, 4000);
+        for (const part of parts) {
+          await ctx
+            .reply(part, { parse_mode: "HTML" })
+            .catch(() => ctx.reply(part));
+        }
+      } else {
+        await ctx
+          .reply(formatted, { parse_mode: "HTML" })
+          .catch(() => ctx.reply(formatted));
       }
-    } else {
-      await ctx.reply(combined, { parse_mode: "Markdown" }).catch(() =>
-        ctx.reply(combined)
-      );
     }
   } catch (err) {
     console.error("Telegram handler error:", err);
@@ -94,7 +237,6 @@ function splitMessage(text: string, maxLength: number): string[] {
       parts.push(remaining);
       break;
     }
-    // Try to split at a newline or space near the limit
     let splitIdx = remaining.lastIndexOf("\n", maxLength);
     if (splitIdx < maxLength * 0.5) {
       splitIdx = remaining.lastIndexOf(" ", maxLength);
