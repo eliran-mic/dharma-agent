@@ -333,11 +333,24 @@ if (WEBHOOK_URL) {
     bot.telegram.setWebhook(`${WEBHOOK_URL}${webhookPath}`).then(() => {
       console.log(`Webhook set to ${WEBHOOK_URL}${webhookPath}`);
     });
+
+    // Register persistent command menu button
+    bot.telegram.setMyCommands([
+      { command: "start", description: "התחל מחדש / Start over" },
+      { command: "choose", description: "בחר מורה / Choose a teacher" },
+      { command: "help", description: "עזרה / Help" },
+    ]);
   });
 } else {
   // Development: polling mode
   console.log("Starting Telegram bot (polling mode)...");
-  bot.launch();
+  bot.launch().then(() => {
+    bot.telegram.setMyCommands([
+      { command: "start", description: "התחל מחדש / Start over" },
+      { command: "choose", description: "בחר מורה / Choose a teacher" },
+      { command: "help", description: "עזרה / Help" },
+    ]);
+  });
 }
 
 // Graceful shutdown (bot.stop() only works in polling mode)
