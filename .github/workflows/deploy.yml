@@ -76,3 +76,12 @@ jobs:
           gcloud run services update ${{ env.SERVICE }} \
             --region ${{ env.REGION }} \
             --update-env-vars "WEBHOOK_URL=$SERVICE_URL"
+
+      - name: Notify users of new version
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE }} --region ${{ env.REGION }} --format="value(status.url)")
+          sleep 10
+          curl -s -X POST "$SERVICE_URL/api/broadcast" \
+            -H "Content-Type: application/json" \
+            -d '{"message":"🔄 גרסה חדשה הותקנה! אם משהו לא עובד, נסו /start מחדש.\n\nA new version has been deployed! If something doesn'\''t work, try /start again."}' \
+            || echo "Broadcast skipped (no active users)"

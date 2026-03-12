@@ -1,7 +1,10 @@
 const PREFERENCE_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
+type Language = "hebrew" | "english";
+
 interface Preference {
   teacherId: string | null; // null = all teachers
+  language: Language;
   lastAccess: number;
 }
 
@@ -17,13 +20,18 @@ setInterval(() => {
   }
 }, 60 * 60 * 1000).unref();
 
-export function getSelectedTeacher(userId: string): string | null {
-  const pref = preferences.get(userId);
-  if (pref) {
-    pref.lastAccess = Date.now();
-    return pref.teacherId;
+function getOrCreate(userId: string): Preference {
+  let pref = preferences.get(userId);
+  if (!pref) {
+    pref = { teacherId: null, language: "hebrew", lastAccess: Date.now() };
+    preferences.set(userId, pref);
   }
-  return null; // default: all teachers
+  pref.lastAccess = Date.now();
+  return pref;
+}
+
+export function getSelectedTeacher(userId: string): string | null {
+  return getOrCreate(userId).teacherId;
 }
 
 /**
@@ -34,8 +42,16 @@ export function setSelectedTeacher(
   userId: string,
   teacherId: string | null
 ): boolean {
-  const prev = preferences.get(userId);
-  const changed = !prev || prev.teacherId !== teacherId;
-  preferences.set(userId, { teacherId, lastAccess: Date.now() });
+  const pref = getOrCreate(userId);
+  const changed = pref.teacherId !== teacherId;
+  pref.teacherId = teacherId;
   return changed;
+}
+
+export function getLanguage(userId: string): Language {
+  return getOrCreate(userId).language;
+}
+
+export function setLanguage(userId: string, language: Language): void {
+  getOrCreate(userId).language = language;
 }

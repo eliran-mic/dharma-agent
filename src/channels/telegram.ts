@@ -6,11 +6,16 @@ import { embedQuery } from "../ingestion/embedder.js";
 import {
   getSelectedTeacher,
   setSelectedTeacher,
+  getLanguage,
+  setLanguage,
 } from "../core/teacher-preference.js";
 import { clearHistory } from "../core/conversation-store.js";
 
 const bot = new Telegraf(config.telegramBotToken);
 const app = express();
+
+// Track active chat IDs so we can broadcast messages (e.g. deploy notifications)
+const activeChatIds = new Set<number>();
 
 function escapeHtml(text: string): string {
   return text
@@ -78,8 +83,28 @@ bot.catch((err: any, ctx: any) => {
 });
 
 bot.start(async (ctx) => {
-  const lang = ctx.from?.language_code;
-  const isHebrew = lang === "he";
+  activeChatIds.add(ctx.chat.id);
+
+  const langKeyboard = Markup.inlineKeyboard([
+    Markup.button.callback("עברית 🇮🇱", "set_lang:hebrew"),
+    Markup.button.callback("English 🇬🇧", "set_lang:english"),
+  ]);
+
+  await ctx.reply(
+    "שלום! 🙏 באיזו שפה תרצו לשוחח?\nHello! 🙏 Which language would you like to use?",
+    langKeyboard
+  );
+});
+
+// Handle language selection → then show teacher picker
+bot.action(/^set_lang:(hebrew|english)$/, async (ctx) => {
+  const lang = ctx.match[1] as "hebrew" | "english";
+  const userId = String(ctx.from.id);
+  setLanguage(userId, lang);
+  const isHebrew = lang === "hebrew";
+
+  await ctx.answerCbQuery();
+  await ctx.editMessageReplyMarkup(undefined);
 
   const welcomeText = isHebrew ? WELCOME_MESSAGE_HE : WELCOME_MESSAGE_EN;
   const selectionText = buildTeacherSelectionMessage(isHebrew);
@@ -90,9 +115,8 @@ bot.start(async (ctx) => {
 });
 
 bot.command("choose", async (ctx) => {
-  const msgText = ctx.message.text || "";
-  const hebrewChars = (msgText.match(/[\u0590-\u05FF]/g) || []).length;
-  const isHebrew = hebrewChars > 0 || ctx.from?.language_code === "he";
+  const userId = String(ctx.from.id);
+  const isHebrew = getLanguage(userId) === "hebrew";
 
   const text = buildTeacherSelectionMessage(isHebrew);
   const keyboard = buildTeacherKeyboard(isHebrew);
@@ -100,9 +124,8 @@ bot.command("choose", async (ctx) => {
 });
 
 bot.help(async (ctx) => {
-  const lang = ctx.from?.language_code;
-  const isHebrew = lang === "he";
   const userId = String(ctx.from.id);
+  const isHebrew = getLanguage(userId) === "hebrew";
   const selectedId = getSelectedTeacher(userId);
   const teachers = getAllTeachers();
   const selected = selectedId
@@ -110,25 +133,24 @@ bot.help(async (ctx) => {
     : null;
 
   const currentHe = selected
-    ? `המורה הנוכחי: *${selected.hebrewName}*`
-    : "כרגע: *כל המורים*";
+    ? `המורה הנוכחי: <b>${escapeHtml(selected.hebrewName)}</b>`
+    : "כרגע: <b>כל המורים</b>";
   const currentEn = selected
-    ? `Current teacher: *${selected.name}*`
-    : "Currently: *All teachers*";
+    ? `Current teacher: <b>${escapeHtml(selected.name)}</b>`
+    : "Currently: <b>All teachers</b>";
 
   const helpText = isHebrew
     ? `שלחו הודעה עם השאלה שלכם על דרמה, מדיטציה או תרגול קשיבות.\n\n${currentHe}\n\nהשתמשו ב /choose כדי לבחור מורה אחר.`
     : `Send me a message with your question about dharma, meditation, or mindfulness practice.\n\n${currentEn}\n\nUse /choose to select a different teacher.`;
 
-  await ctx.reply(helpText, { parse_mode: "Markdown" });
+  await ctx.reply(helpText, { parse_mode: "HTML" });
 });
 
 // Handle teacher selection callback
 bot.action(/^select_teacher:(.+)$/, async (ctx) => {
   const teacherId = ctx.match[1];
   const userId = String(ctx.from.id);
-  const lang = ctx.from?.language_code;
-  const isHebrew = lang === "he";
+  const isHebrew = getLanguage(userId) === "hebrew";
 
   if (teacherId === "all") {
     const changed = setSelectedTeacher(userId, null);
@@ -159,12 +181,12 @@ bot.action(/^select_teacher:(.+)$/, async (ctx) => {
 });
 
 bot.on("text", async (ctx) => {
+  activeChatIds.add(ctx.chat.id);
   const userId = String(ctx.from.id);
   const message = ctx.message.text;
 
-  // Detect language for the acknowledgment message
-  const hebrewChars = (message.match(/[\u0590-\u05FF]/g) || []).length;
-  const isHebrew = hebrewChars > (message.match(/[a-zA-Z]/g) || []).length;
+  // Use saved language preference for UI messages
+  const isHebrew = getLanguage(userId) === "hebrew";
 
   // Check if user has a teacher preference
   const selectedId = getSelectedTeacher(userId);
@@ -249,6 +271,32 @@ function splitMessage(text: string, maxLength: number): string[] {
   }
   return parts;
 }
+
+// Broadcast endpoint for deploy notifications
+app.use(express.json());
+app.post("/api/broadcast", async (req, res) => {
+  const { message } = req.body;
+  if (!message) {
+    res.status(400).json({ error: "message is required" });
+    return;
+  }
+
+  let sent = 0;
+  let failed = 0;
+  for (const chatId of activeChatIds) {
+    try {
+      await bot.telegram.sendMessage(chatId, message, { parse_mode: "HTML" });
+      sent++;
+    } catch (err: any) {
+      failed++;
+      // Remove blocked/deleted chats
+      if (err?.response?.error_code === 403) {
+        activeChatIds.delete(chatId);
+      }
+    }
+  }
+  res.json({ sent, failed, total: activeChatIds.size });
+});
 
 // Health check endpoint (required for Cloud Run)
 app.get("/health", async (_req, res) => {
